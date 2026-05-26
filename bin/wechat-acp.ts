@@ -71,6 +71,7 @@ Options:
                       Use 0 to disable idle cleanup
   --max-sessions <n>  Max concurrent user sessions (default: 10)
   --hide-thoughts     Do not forward agent thinking to WeChat (default: forwarded)
+  --hide-diffs        Do not forward ACP file diffs to WeChat (default: forwarded)
   -v, --verbose       Verbose logging
   -h, --help          Show this help
 `);
@@ -89,6 +90,7 @@ function parseArgs(argv: string[]): {
   idleTimeout?: number;
   maxSessions?: number;
   hideThoughts: boolean;
+  hideDiffs: boolean;
   verbose: boolean;
   help: boolean;
 } {
@@ -97,6 +99,7 @@ function parseArgs(argv: string[]): {
     daemon: false,
     disableInbox: false,
     hideThoughts: false,
+    hideDiffs: false,
     verbose: false,
     help: false,
   } as ReturnType<typeof parseArgs>;
@@ -145,6 +148,9 @@ function parseArgs(argv: string[]): {
         break;
       case "--hide-thoughts":
         result.hideThoughts = true;
+        break;
+      case "--hide-diffs":
+        result.hideDiffs = true;
         break;
       case "-v":
       case "--verbose":
@@ -370,6 +376,7 @@ async function main(): Promise<void> {
   }
   if (args.maxSessions) config.session.maxConcurrentUsers = args.maxSessions;
   if (args.hideThoughts) config.agent.showThoughts = false;
+  if (args.hideDiffs) config.agent.showDiffs = false;
   config.daemon.enabled = args.daemon;
 
   // Handle daemon mode

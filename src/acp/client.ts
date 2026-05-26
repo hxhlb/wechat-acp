@@ -14,6 +14,7 @@ export interface WeChatAcpClientOpts {
   onThoughtFlush: (text: string) => Promise<void>;
   log: (msg: string) => void;
   showThoughts: boolean;
+  showDiffs?: boolean;
 }
 
 export class WeChatAcpClient implements acp.Client {
@@ -88,6 +89,9 @@ export class WeChatAcpClient implements acp.Client {
         if (update.status === "completed" && update.content) {
           for (const c of update.content) {
             if (c.type === "diff") {
+              if (this.opts.showDiffs === false) {
+                continue;
+              }
               const diff = c as acp.Diff;
               const header = `--- ${diff.path}`;
               const lines: string[] = [header];

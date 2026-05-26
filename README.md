@@ -86,6 +86,7 @@ Options:
 - `--inbox-dir <dir>`: directory where received binary files are saved (default: `<storage.dir>/inbox`). The agent sees the absolute saved path in the prompt and can read the file directly.
 - `--no-inbox`: do not save received files; the agent only sees a size notice.
 - `--hide-thoughts`: do not forward agent thinking to WeChat (default: forwarded)
+- `--hide-diffs`: do not forward ACP file diffs to WeChat (default: forwarded)
 - `-h, --help`: show help
 
 Examples:
@@ -132,7 +133,8 @@ Example:
 {
   "agent": {
     "preset": "copilot",
-    "cwd": "D:/code/project"
+    "cwd": "D:/code/project",
+    "showDiffs": true
   },
   "session": {
     "idleTimeoutMs": 86400000,

@@ -36,6 +36,7 @@ export interface SessionManagerOpts {
   idleTimeoutMs: number;
   maxConcurrentUsers: number;
   showThoughts: boolean;
+  showDiffs?: boolean;
   log: (msg: string) => void;
   onReply: (userId: string, contextToken: string, text: string) => Promise<void>;
   sendTyping: (userId: string, contextToken: string) => Promise<void>;
@@ -114,6 +115,7 @@ export class SessionManager {
       onThoughtFlush: (text) => this.opts.onReply(userId, contextToken, text),
       log: (msg) => this.opts.log(`[${userId}] ${msg}`),
       showThoughts: this.opts.showThoughts,
+      showDiffs: this.opts.showDiffs ?? true,
     });
 
     const agentInfo = await spawnAgent({
