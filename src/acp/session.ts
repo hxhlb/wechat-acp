@@ -150,6 +150,49 @@ export class SessionManager {
     return response.configOptions;
   }
 
+  /**
+   * Cancel the in-flight ACP prompt turn for a user, optionally also dropping
+   * any messages that were queued behind it.
+   *
+   * The ACP `session/cancel` notification is fire-and-forget; the in-flight
+   * `prompt()` call will resolve naturally with `stopReason: "cancelled"` and
+   * the existing `processQueue` loop will flush whatever output was already
+   * streamed back to WeChat (with a `[cancelled]` suffix).
+   */
+  async cancelCurrent(
+    userId: string,
+    opts?: { drainQueue?: boolean },
+  ): Promise<{ cancelledTurn: boolean; droppedQueueCount: number }> {
+    const session = this.sessions.get(userId);
+    if (!session) {
+      return { cancelledTurn: false, droppedQueueCount: 0 };
+    }
+
+    session.lastActivity = Date.now();
+
+    let droppedQueueCount = 0;
+    if (opts?.drainQueue && session.queue.length > 0) {
+      const dropped = session.queue.splice(0);
+      droppedQueueCount = dropped.length;
+      const err = new Error("Cancelled before queued message was processed");
+      for (const pending of dropped) {
+        pending.completion?.reject(err);
+      }
+    }
+
+    if (!session.processing) {
+      return { cancelledTurn: false, droppedQueueCount };
+    }
+
+    try {
+      await session.agentInfo.connection.cancel({ sessionId: session.agentInfo.sessionId });
+    } catch (err) {
+      this.opts.log(`[${userId}] cancel notification failed: ${String(err)}`);
+    }
+
+    return { cancelledTurn: true, droppedQueueCount };
+  }
+
   get activeCount(): number {
     return this.sessions.size;
   }

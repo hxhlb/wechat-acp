@@ -201,6 +201,22 @@ Notes:
 - Available `configId` values come directly from the ACP agent's `configOptions`, so the exact list depends on the configured agent.
 - This command is handled by `wechat-acp` itself and is **not** forwarded to the underlying agent.
 
+## WeChat ACP cancel command
+
+WeChat does not offer a stop button for an in-flight agent turn, so the bridge exposes a chat command instead:
+
+```text
+/acp-cancel
+/acp-cancel all
+```
+
+Behavior:
+
+- `/acp-cancel` sends `session/cancel` to the agent for the current turn. The in-flight `prompt()` resolves with `stopReason: "cancelled"`, any partial output already streamed is delivered to WeChat with a `[cancelled]` suffix, and the next queued message (if any) is processed as usual.
+- `/acp-cancel all` does the same and also drops every message that was queued behind the current turn. Local injections (`wechat-acp inject`) waiting on those queued messages are rejected.
+- If no turn is in flight, the command replies with a notice and is a no-op.
+- This command is handled by `wechat-acp` itself and is **not** forwarded to the underlying agent.
+
 ## Injecting messages locally
 
 `wechat-acp inject` lets local automation enqueue a text message for the running daemon. The daemon treats it like an incoming direct message from the target user, sends it to the configured ACP agent, and replies through WeChat.
@@ -332,7 +348,7 @@ npm run dev
 WECHAT_ACP_TELEMETRY=0 npx wechat-acp --agent copilot
 ```
 
-**What is collected** (12 event types only):
+**What is collected** (13 event types only):
 
 - `app.start` / `app.stop` — process lifecycle, agent preset name, daemon flag, uptime
 - `login.success` / `login.failure` / `token.reused` — WeChat login outcomes (no token, no QR URL)
@@ -340,6 +356,7 @@ WECHAT_ACP_TELEMETRY=0 npx wechat-acp --agent copilot
 - `message.injected` — local injection queued for processing; only target kind (`last-active-user` / `explicit`) and a hashed user id
 - `command.acp_config.view` — `/acp-config` invoked to list options; whether a session exists and the option count
 - `command.acp_config.set` — `/acp-config set` succeeded; `configId`, option type (`select` / `boolean`), and the resolved option value (all from the agent's declared `configOptions`, never the user's raw input)
+- `command.acp_cancel` — `/acp-cancel` invoked; whether the queue was drained, whether an in-flight turn was actually cancelled, and how many queued messages were dropped
 - `session.created` — new ACP session opened
 - `prompt.completed` — ACP turn finished; agent preset, stop reason, duration, reply length
 - `reply.sent` — reply pushed back to WeChat; segment count, total length

@@ -21,6 +21,7 @@ import { resolveUserTarget, updateLastActiveUser } from "./storage/state.js";
 import { trackEvent, trackException, hashUserId } from "./telemetry/index.js";
 
 const ACP_CONFIG_COMMAND = "/acp-config";
+const ACP_CANCEL_COMMAND = "/acp-cancel";
 const TEXT_CHUNK_LIMIT = 4000;
 
 export class WeChatAcpBridge {
@@ -164,6 +165,15 @@ export class WeChatAcpBridge {
       return;
     }
 
+    const acpCancelCommand = this.extractAcpCancelCommand(msg);
+    if (acpCancelCommand) {
+      this.handleAcpCancelCommand(acpCancelCommand, userId, contextToken).catch((err) => {
+        this.log(`Failed to handle ACP cancel command from ${userId}: ${String(err)}`);
+        trackException(err, "command", hashUserId(userId));
+      });
+      return;
+    }
+
     // Convert and enqueue — fire-and-forget (don't block the poll loop)
     this.enqueueMessage(msg, userId, contextToken).catch((err) => {
       this.log(`Failed to enqueue message from ${userId}: ${String(err)}`);
@@ -273,6 +283,73 @@ export class WeChatAcpBridge {
       contextToken,
       this.formatAcpConfigUsage(`Unknown subcommand: ${args[1]}`),
     );
+  }
+
+  private async handleAcpCancelCommand(
+    command: string,
+    userId: string,
+    contextToken: string,
+  ): Promise<void> {
+    const args = command.trim().split(/\s+/);
+    const sub = args[1]?.toLowerCase();
+
+    if (sub && sub !== "all") {
+      await this.sendReply(userId, contextToken, this.formatAcpCancelUsage(`Unknown subcommand: ${args[1]}`));
+      return;
+    }
+
+    if (!this.sessionManager) {
+      await this.sendReply(userId, contextToken, this.formatAcpCancelUsage("Bridge is not ready yet."));
+      return;
+    }
+
+    const drainQueue = sub === "all";
+    const result = await this.sessionManager.cancelCurrent(userId, { drainQueue });
+
+    trackEvent(
+      "command.acp_cancel",
+      {
+        userIdHash: hashUserId(userId),
+        drainQueue,
+        cancelledTurn: result.cancelledTurn,
+        droppedQueueCount: result.droppedQueueCount,
+      },
+      hashUserId(userId),
+    );
+
+    await this.sendReply(userId, contextToken, this.formatAcpCancelResult(result, drainQueue));
+  }
+
+  private formatAcpCancelResult(
+    result: { cancelledTurn: boolean; droppedQueueCount: number },
+    drainQueue: boolean,
+  ): string {
+    const lines: string[] = [];
+    if (result.cancelledTurn) {
+      lines.push("🛑 Cancel signal sent. The current ACP turn will stop shortly.");
+    } else {
+      lines.push("ℹ️ No active ACP turn to cancel.");
+    }
+    if (drainQueue && result.droppedQueueCount > 0) {
+      lines.push(`Dropped ${result.droppedQueueCount} queued message(s).`);
+    }
+    lines.push("");
+    lines.push("💡 **Usage**");
+    lines.push(`   • Cancel current turn:        ${ACP_CANCEL_COMMAND}`);
+    lines.push(`   • Cancel + drop queued msgs:  ${ACP_CANCEL_COMMAND} all`);
+    return lines.join("\n");
+  }
+
+  private formatAcpCancelUsage(error?: string): string {
+    const lines: string[] = [];
+    if (error) {
+      lines.push(`⚠️ ${error}`);
+      lines.push("");
+    }
+    lines.push("💡 **Usage**");
+    lines.push(`   • Cancel current turn:        ${ACP_CANCEL_COMMAND}`);
+    lines.push(`   • Cancel + drop queued msgs:  ${ACP_CANCEL_COMMAND} all`);
+    return lines.join("\n");
   }
 
   private rememberActiveUser(userId: string, contextToken: string): void {
@@ -404,6 +481,14 @@ export class WeChatAcpBridge {
   }
 
   private extractAcpConfigCommand(msg: WeixinMessage): string | null {
+    return this.extractBridgeCommand(msg, ACP_CONFIG_COMMAND);
+  }
+
+  private extractAcpCancelCommand(msg: WeixinMessage): string | null {
+    return this.extractBridgeCommand(msg, ACP_CANCEL_COMMAND);
+  }
+
+  private extractBridgeCommand(msg: WeixinMessage, command: string): string | null {
     const items = msg.item_list ?? [];
     if (items.length !== 1) return null;
 
@@ -411,7 +496,7 @@ export class WeChatAcpBridge {
     if (item?.type !== 1 || !item.text_item?.text) return null;
 
     const text = item.text_item.text.trim();
-    return text === ACP_CONFIG_COMMAND || text.startsWith(`${ACP_CONFIG_COMMAND} `) ? text : null;
+    return text === command || text.startsWith(`${command} `) ? text : null;
   }
 
   private formatAcpConfigList(userId: string): string {

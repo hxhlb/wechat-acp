@@ -31,6 +31,7 @@ export type EventName =
   | "message.injected"
   | "command.acp_config.view"
   | "command.acp_config.set"
+  | "command.acp_cancel"
   | "session.created"
   | "prompt.completed"
   | "reply.sent";
